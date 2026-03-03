@@ -50,7 +50,7 @@ func Authenticate(header string) error {
 	h, err := parseHeader(header)
 
 	if err != nil {
-		return err
+		return fmt.Errorf("parse X-FormSG-Signature header: %w", err)
 	}
 
 	if h.t == "" || h.s == "" || h.f == "" || h.v1 == "" {
@@ -61,11 +61,11 @@ func Authenticate(header string) error {
 
 	formPublicKeyBytes, err := base64.StdEncoding.DecodeString(os.Getenv("FORM_PUBLIC_KEY"))
 	if err != nil {
-		return err
+		return fmt.Errorf("decode form public key: %w", err)
 	}
 	signatureBytes, err := base64.StdEncoding.DecodeString(h.v1)
 	if err != nil {
-		return err
+		return fmt.Errorf("decode signature: %w", err)
 	}
 
 	if !ed25519.Verify(formPublicKeyBytes, []byte(baseString), signatureBytes) {
@@ -75,7 +75,7 @@ func Authenticate(header string) error {
 	// change string to int64
 	i, err := strconv.ParseInt(h.t, 10, 64)
 	if err != nil {
-		return err
+		return fmt.Errorf("parse timestamp: %w", err)
 	}
 
 	epoch := time.Unix(0, i*int64(time.Millisecond))

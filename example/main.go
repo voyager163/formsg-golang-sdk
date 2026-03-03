@@ -3,7 +3,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"log"
+	"log/slog"
 	"net/http"
 	"os"
 
@@ -13,7 +13,7 @@ import (
 
 const (
 	// Set to true if you need to download and decrypt attachments from submissions
-	has_attachments = true
+	hasAttachments = true
 )
 
 // submissions is the handler for the /submissions endpoint.
@@ -40,7 +40,7 @@ func submissions(w http.ResponseWriter, r *http.Request) {
 	// Decrypt the submission content
 	decryptedBody, err := crypto.Decrypt(encryptedBody)
 	if err != nil {
-		log.Println(err.Error())
+		slog.Error("decryption failed", "error", err)
 		http.Error(w, `{ "message": "decryption fail"}`, http.StatusBadRequest)
 		return
 	}
@@ -59,13 +59,13 @@ func submissions(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if has_attachments {
+	if hasAttachments {
 		for _, field := range decryptedBody.Data.DecryptedContent {
 			if field.FieldType == "attachment" {
-				if download_url, ok := encryptedBody.Data.AttachmentDownloadUrls[field.ID]; ok {
-					decBytes, err := crypto.DownloadAttachment(download_url)
+				if downloadURL, ok := encryptedBody.Data.AttachmentDownloadUrls[field.ID]; ok {
+					decBytes, err := crypto.DownloadAttachment(downloadURL)
 					if err != nil {
-						log.Println(err.Error())
+						slog.Error("download attachment failed", "error", err)
 						http.Error(w, `{ "message": "download attachment fail"}`, http.StatusBadRequest)
 						return
 					}
@@ -73,7 +73,7 @@ func submissions(w http.ResponseWriter, r *http.Request) {
 					// save attachment to file
 					file2, err := os.Create(fmt.Sprintf("./temp/%s.%s", field.ID, field.Answer))
 					if err != nil {
-						log.Panicln(err.Error())
+						slog.Error("file open failed", "error", err)
 						http.Error(w, `{ "message": "file open fail"}`, http.StatusBadRequest)
 						return
 					}
@@ -81,7 +81,7 @@ func submissions(w http.ResponseWriter, r *http.Request) {
 
 					_, err = file2.Write(decBytes)
 					if err != nil {
-						log.Panicln(err.Error())
+						slog.Error("file write failed", "error", err)
 						http.Error(w, `{ "message": "file write fail"}`, http.StatusBadRequest)
 						return
 					}
@@ -109,19 +109,14 @@ func main() {
 	}
 
 	// Create temp folder to house the content of the decrypted files from FormSG
-	_, err := os.Stat("temp")
-
-	if os.IsNotExist(err) {
-		log.Println("Folder does not exist.")
-		err := os.Mkdir("temp", 0755)
-		if err != nil {
-			log.Fatal(err)
-		}
-	} else {
-		log.Println("Folder exist.")
+	if err := os.MkdirAll("temp", 0755); err != nil {
+		slog.Error("failed to create temp directory", "error", err)
+		os.Exit(1)
 	}
 
 	http.Handle("/temp/", http.StripPrefix("/temp/", http.FileServer(http.Dir("./temp"))))
 	http.HandleFunc("/submissions", submissions)
+
+	slog.Info("server starting", "addr", ":8080")
 	http.ListenAndServe(":8080", nil)
 }

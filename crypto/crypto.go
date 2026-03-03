@@ -59,14 +59,26 @@ type Attachment struct {
 func Decrypt(encryptedBody EncryptedBody) (*DecryptedBody, error) {
 	// Split the encrypted content into the submission public key, nonce, and ciphertext.
 	splits := strings.Split(encryptedBody.Data.EncryptedContent, ";")
-	submissionPublicKey, _ := base64.StdEncoding.DecodeString(splits[0])
+	submissionPublicKey, err := base64.StdEncoding.DecodeString(splits[0])
+	if err != nil {
+		return nil, fmt.Errorf("decode submission public key: %w", err)
+	}
 	nonceEncrypted := splits[1]
 
 	// Split the nonce into the nonce and encrypted.
 	splits = strings.Split(nonceEncrypted, ":")
-	nonce, _ := base64.StdEncoding.DecodeString(splits[0])
-	encrypted, _ := base64.StdEncoding.DecodeString(splits[1])
-	formPrivateKey, _ := base64.StdEncoding.DecodeString(os.Getenv("FORM_SECRET_KEY"))
+	nonce, err := base64.StdEncoding.DecodeString(splits[0])
+	if err != nil {
+		return nil, fmt.Errorf("decode nonce: %w", err)
+	}
+	encrypted, err := base64.StdEncoding.DecodeString(splits[1])
+	if err != nil {
+		return nil, fmt.Errorf("decode encrypted content: %w", err)
+	}
+	formPrivateKey, err := base64.StdEncoding.DecodeString(os.Getenv("FORM_SECRET_KEY"))
+	if err != nil {
+		return nil, fmt.Errorf("decode form private key: %w", err)
+	}
 
 	// convert the nonce to a 24 byte slice
 	var nonceBytes [24]byte
@@ -87,9 +99,8 @@ func Decrypt(encryptedBody EncryptedBody) (*DecryptedBody, error) {
 	}
 
 	var fields []Field
-	err := json.Unmarshal(decBytes, &fields)
-	if err != nil {
-		return nil, err
+	if err := json.Unmarshal(decBytes, &fields); err != nil {
+		return nil, fmt.Errorf("unmarshal decrypted content: %w", err)
 	}
 
 	var decryptedBody DecryptedBody
@@ -106,25 +117,36 @@ func DownloadAttachment(url string) ([]byte, error) {
 	// download attachment using golang http client
 	resp, err := http.Get(url)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("download attachment: %w", err)
 	}
 	defer resp.Body.Close()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("read attachment response body: %w", err)
 	}
 
 	var attachment Attachment
-	err = json.Unmarshal(body, &attachment)
-	if err != nil {
-		return nil, err
+	if err := json.Unmarshal(body, &attachment); err != nil {
+		return nil, fmt.Errorf("unmarshal attachment: %w", err)
 	}
 
-	nonce, _ := base64.StdEncoding.DecodeString(attachment.EncryptedFile.Nonce)
-	submissionPublicKey, _ := base64.StdEncoding.DecodeString(attachment.EncryptedFile.SubmissionPublicKey)
-	formPrivateKey, _ := base64.StdEncoding.DecodeString(os.Getenv("FORM_SECRET_KEY"))
-	binary, _ := base64.StdEncoding.DecodeString(attachment.EncryptedFile.Binary)
+	nonce, err := base64.StdEncoding.DecodeString(attachment.EncryptedFile.Nonce)
+	if err != nil {
+		return nil, fmt.Errorf("decode attachment nonce: %w", err)
+	}
+	submissionPublicKey, err := base64.StdEncoding.DecodeString(attachment.EncryptedFile.SubmissionPublicKey)
+	if err != nil {
+		return nil, fmt.Errorf("decode attachment submission public key: %w", err)
+	}
+	formPrivateKey, err := base64.StdEncoding.DecodeString(os.Getenv("FORM_SECRET_KEY"))
+	if err != nil {
+		return nil, fmt.Errorf("decode form private key: %w", err)
+	}
+	binary, err := base64.StdEncoding.DecodeString(attachment.EncryptedFile.Binary)
+	if err != nil {
+		return nil, fmt.Errorf("decode attachment binary: %w", err)
+	}
 
 	var nonceBytes [24]byte
 	copy(nonceBytes[:], nonce)
